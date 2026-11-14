@@ -2,7 +2,7 @@
    Start with: node server.js      It only passes messages between the players of one room. */
 'use strict';
 const http = require('http'), crypto = require('crypto');
-const VERSION = 4, PORT = process.env.PORT || 3000, MAX_PLAYERS = 6, MAX_FRAME = 40000;
+const VERSION = 5, PORT = process.env.PORT || 3000, MAX_PLAYERS = 6, MAX_FRAME = 40000;
 const rooms = new Map(), clients = new Set();
 let nextId = 1;
 
@@ -69,7 +69,7 @@ const num = (v, a, b) => Math.max(a, Math.min(b, Number(v) || 0));
 function course(c) {
   if (!c || typeof c !== 'object' || !Array.isArray(c.marks) || c.marks.length < 2 || c.marks.length > 5) return null;
   const txt = (v, n) => String(v == null ? '' : v).replace(/[<>\u0000-\u001f]/g, '').trim().slice(0, n);
-  return { name: txt(c.name, 24) || '?', by: txt(c.by, 14), marks: c.marks.map(k => ({ x: num(k && k.x, -24, 80), z: num(k && k.z, -46, 46) })), w: num(c.w, 0.3, 0.8), wd: Math.round(num(c.wd, -30, 30)), sh: num(c.sh, 0, 20), gu: num(c.gu, 0, 0.2), n: Math.round(num(c.n, 0, 5)) };
+  return { name: txt(c.name, 24) || '?', by: txt(c.by, 14), marks: c.marks.map(k => { k = k || {}; const m = { x: num(k.x, -24, 80), z: num(k.z, -46, 46) }; if (k.x2 != null && k.z2 != null) { m.x2 = num(k.x2, -24, 80); m.z2 = num(k.z2, -46, 46); } return m; }), sx: num(c.sx, -14, 60), sz: num(c.sz, -36, 36), sl: num(c.sl == null ? 7 : c.sl, 5, 22), w: num(c.w, 0.3, 0.8), wd: Math.round(num(c.wd, -30, 30)), sh: num(c.sh, 0, 20), gu: num(c.gu, 0, 0.2), n: Math.round(num(c.n, 0, 5)) };
 }
 const nums = (a, n) => Array.isArray(a) && a.length <= n && a.every(v => typeof v === 'number' && isFinite(v));
 function onMsg(c, m) {
