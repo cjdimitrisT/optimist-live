@@ -2,7 +2,7 @@
    Start with: node server.js      It only passes messages between the players of one room. */
 'use strict';
 const http = require('http'), crypto = require('crypto');
-const VERSION = 1, PORT = process.env.PORT || 3000, MAX_PLAYERS = 6, MAX_FRAME = 40000;
+const VERSION = 3, PORT = process.env.PORT || 3000, MAX_PLAYERS = 6, MAX_FRAME = 40000;
 const rooms = new Map(), clients = new Set();
 let nextId = 1;
 
@@ -54,7 +54,7 @@ server.on('upgrade', (req, sock) => {
 setInterval(() => { for (const c of clients) { if (!c.alive) { c.closed || c.sock.destroy(); continue; } c.alive = false; try { c.sock.write(frame(9, '')); } catch (e) { } } }, 30000);
 
 /* ---------- rooms ---------- */
-const roomMsg = r => ({ t: 'room', code: r.code, host: r.host.id, racing: r.racing, cfg: r.cfg, members: r.members.map(x => ({ id: x.id, nick: x.nick, voice: x.voice })) });
+const roomMsg = r => ({ t: 'room', code: r.code, host: r.host.id, racing: r.racing, cfg: r.cfg, race: r.raceNo, of: r.cfg.races, members: r.members.map(x => ({ id: x.id, nick: x.nick, voice: x.voice })) });
 const cast = (r, m, except) => { for (const x of r.members) if (x !== except) send(x, m); };
 function newCode() { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; for (;;) { let s = ''; for (let i = 0; i < 4; i++) s += A[crypto.randomInt(A.length)]; if (!rooms.has(s)) return s; } }
 function leave(c) {
@@ -72,7 +72,7 @@ function onMsg(c, m) {
     if (r) return;
     c.nick = String(m.nick || '').replace(/[<>&"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 14) || 'Sailor';
     let room;
-    if (m.create) { room = { code: newCode(), members: [], host: c, racing: false, cfg: { lvl: 0, bots: true, hints: true } }; rooms.set(room.code, room); }
+    if (m.create) { room = { code: newCode(), members: [], host: c, racing: false, raceNo: 0, cfg: { lvl: 0, bots: true, hints: true, races: 1 } }; rooms.set(room.code, room); }
     else {
       room = rooms.get(String(m.room || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4));
       if (!room) return send(c, { t: 'error', code: 'noroom' });
@@ -84,9 +84,13 @@ function onMsg(c, m) {
     return;
   }
   if (!r) return;
-  if (m.t === 'cfg' && r.host === c && !r.racing) { r.cfg = { lvl: Math.round(num(m.lvl, 0, 5)), bots: !!m.bots, hints: !!m.hints }; return cast(r, roomMsg(r)); }
-  if (m.t === 'start' && r.host === c && !r.racing) { r.racing = true; for (const x of r.members) x.fin = false; cast(r, { t: 'start', cfg: r.cfg, order: r.members.map(x => x.id) }); return cast(r, roomMsg(r)); }
-  if (m.t === 'end' && r.host === c && r.racing) { r.racing = false; return cast(r, roomMsg(r)); }
+  if (m.t === 'cfg' && r.host === c && !r.racing) { r.cfg = { lvl: Math.round(num(m.lvl, 0, 5)), bots: !!m.bots, hints: !!m.hints, races: Math.round(num(m.races, 1, 5)) || 1 }; r.raceNo = 0; return cast(r, roomMsg(r)); }
+  if (m.t === 'start' && r.host === c && !r.racing) {   // a series: race 1..n, then the next start begins a new series
+    if (r.raceNo >= r.cfg.races) r.raceNo = 0;
+    r.racing = true; for (const x of r.members) x.fin = false; cast(r, { t: 'start', cfg: r.cfg, order: r.members.map(x => x.id), race: r.raceNo, of: r.cfg.races }); return cast(r, roomMsg(r));
+  }
+  if (m.t === 'end' && r.host === c && r.racing) { r.racing = false; r.raceNo++; return cast(r, roomMsg(r)); }
+  if (m.t === 'bfin' && r.host === c && r.racing) return cast(r, { t: 'bfin', i: Math.round(num(m.i, 0, 4)), time: num(m.time, 0, 36000) }, c);   // a bot of the host finished
   if (m.t === 'pos' && r.racing) {
     if (!nums(m.d, 10)) return;
     const o = { t: 'pos', from: c.id, d: m.d };
@@ -95,9 +99,10 @@ function onMsg(c, m) {
   }
   if (m.t === 'fin' && r.racing && !c.fin) {
     c.fin = true; cast(r, { t: 'fin', from: c.id, nick: c.nick, time: num(m.time, 0, 36000) });
-    if (r.members.every(x => x.fin)) { r.racing = false; cast(r, roomMsg(r)); }
+    if (r.members.every(x => x.fin)) { r.racing = false; r.raceNo++; cast(r, roomMsg(r)); }
     return;
   }
+  if (m.t === 'bp' && r.racing && r.host !== c) return send(r.host, { t: 'bp', i: Math.round(num(m.i, 0, 4)) });   // a bot fouled this player: the host makes it do its turns
   if (m.t === 'voice') { c.voice = !!m.on; return cast(r, roomMsg(r)); }
   if (m.t === 'rtc') {   // voice chat: pass the message on, only inside the same room
     const to = r.members.find(x => x.id === m.to && x !== c); if (!to) return;
