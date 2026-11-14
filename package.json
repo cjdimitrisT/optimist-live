@@ -1,0 +1,8 @@
+{
+  "name": "optimist-live",
+  "version": "1.0.0",
+  "description": "Optimist Academy live server for online races with friends",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
