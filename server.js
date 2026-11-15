@@ -2,7 +2,7 @@
    Start with: node server.js      It only passes messages between the players of one room. */
 'use strict';
 const http = require('http'), crypto = require('crypto');
-const VERSION = 5, PORT = process.env.PORT || 3000, MAX_PLAYERS = 6, MAX_FRAME = 40000;
+const VERSION = 6, PORT = process.env.PORT || 3000, MAX_PLAYERS = 6, MAX_FRAME = 40000;
 const rooms = new Map(), clients = new Set();
 let nextId = 1;
 
@@ -90,7 +90,7 @@ function onMsg(c, m) {
     return;
   }
   if (!r) return;
-  if (m.t === 'cfg' && r.host === c && !r.racing) { r.cfg = { lvl: Math.round(num(m.lvl, 0, 5)), bots: !!m.bots, hints: !!m.hints, races: Math.round(num(m.races, 1, 5)) || 1, crs: course(m.crs) }; r.raceNo = 0; return cast(r, roomMsg(r)); }
+  if (m.t === 'cfg' && r.host === c && !r.racing) { r.cfg = { lvl: Math.round(num(m.lvl, 0, 5)), bots: !!m.bots, hints: !!m.hints, races: Math.round(num(m.races, 1, 5)) || 1, crs: course(m.crs), wbf: [2, 3, 4, 5].includes(m.wbf) ? m.wbf : 0, wsh: [0, 1, 2].includes(m.wsh) ? m.wsh : -1 }; r.raceNo = 0; return cast(r, roomMsg(r)); }
   if (m.t === 'start' && r.host === c && !r.racing) {   // a series: race 1..n, then the next start begins a new series
     if (r.raceNo >= r.cfg.races) r.raceNo = 0;
     r.racing = true; for (const x of r.members) x.fin = false; cast(r, { t: 'start', cfg: r.cfg, order: r.members.map(x => x.id), race: r.raceNo, of: r.cfg.races }); return cast(r, roomMsg(r));
